@@ -2,10 +2,10 @@
 #      Main Configs       #
 # ----------------------- #
 
-url: http://yoursite.com
-title: My Octopress Blog
-subtitle: A blogging framework for hackers.
-author: Your Name
+url: http://morm.github.io/mor_t
+title: Mor's dev blog
+subtitle: Things that I do.
+author: Mor
 simple_search: https://www.google.com/search
 description:
 
@@ -16,7 +16,7 @@ description:
 date_format: "ordinal"
 
 # RSS / Email (optional) subscription links (change if using something like Feedburner)
-subscribe_rss: /atom.xml
+subscribe_rss: /mor_t/atom.xml
 subscribe_email:
 # RSS feeds can list your email address if you like
 email:
@@ -26,10 +26,10 @@ email:
 # ----------------------- #
 
 # If publishing to a subdirectory as in http://site.com/project set 'root: /project'
-root: /
+root: /mor_t
 permalink: /blog/:year/:month/:day/:title/
 source: source
-destination: public
+destination: public/mor_t
 plugins: plugins
 code_dir: downloads/code
 category_dir: blog/categories
@@ -64,8 +64,8 @@ default_asides: [asides/recent_posts.html, asides/github.html, asides/delicious.
 # ----------------------- #
 
 # Github repositories
-github_user:
-github_repo_count: 0
+github_user: morm
+github_repo_count: 3
 github_show_profile_link: true
 github_skip_forks: true
 
@@ -91,8 +91,8 @@ delicious_user:
 delicious_count: 3
 
 # Disqus Comments
-disqus_short_name:
-disqus_show_comment_count: false
+disqus_short_name: morsdevblog
+disqus_show_comment_count: true
 
 # Google Analytics
 google_analytics_tracking_id:
