@@ -1,0 +1,905 @@
+
+<!DOCTYPE html>
+<!--[if IEMobile 7 ]><html class="no-js iem7"><![endif]-->
+<!--[if lt IE 9]><html class="no-js lte-ie8"><![endif]-->
+<!--[if (gt IE 8)|(gt IEMobile 7)|!(IEMobile)|!(IE)]><!--><html class="no-js" lang="en"><!--<![endif]-->
+<head>
+  <meta charset="utf-8">
+  <title>RPC на C++ своими руками. Часть 1 - Mor's dev blog</title>
+  <meta name="author" content="Mor">
+  <link rel="author" href="humans.txt">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge,chrome=1">
+
+  
+    
+  
+  <meta name="description" content="RPC через CreateRemoteThread под Windows Мое исследование возможных реализаций RPC. Для начала рассмотрим реализацию RPC через создание потока в &hellip;">
+  
+  <!-- http://t.co/dKP3o1e -->
+  <meta name="HandheldFriendly" content="True">
+  <meta name="MobileOptimized" content="320">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+
+  
+  <link rel="canonical" href="http://morm.github.io/blog/2014/01/05/rpc-na-c-plus-plus-svoimi-rukami-chast'-1/">
+  <link href="/mor_t/favicon.png" rel="icon">
+  <link href='http://fonts.googleapis.com/css?family=Cantarell' rel='stylesheet' type='text/css'>
+  <link href="/mor_t/stylesheets/screen.css" media="screen, projection" rel="stylesheet" type="text/css">
+  <link href="/mor_t/atom.xml" rel="alternate" title="Mor's dev blog" type="application/atom+xml">
+  <meta name="og:type" content="website" />
+  <meta name="og:site_name" content="Mor's dev blog" />
+  <meta name="og:title" content="RPC на C++ своими руками. Часть 1" />
+  <meta name="og:description" content="RPC через CreateRemoteThread под Windows Мое исследование возможных реализаций RPC. Для начала рассмотрим реализацию RPC через создание потока в &hellip;" />
+  <meta name="og:url" content="http://morm.github.io/blog/2014/01/05/rpc-na-c-plus-plus-svoimi-rukami-chast'-1/"/>
+  <meta name="url" content="http://morm.github.io/blog/2014/01/05/rpc-na-c-plus-plus-svoimi-rukami-chast'-1/">
+  
+  <meta name="subject" content="rpc"/>
+  <meta name="category" content="rpc"/>
+  
+  <meta name="distribution" content="global">
+  <!--Fonts from Google"s Web font directory at http://google.com/webfonts -->
+<link href="http://fonts.googleapis.com/css?family=PT+Serif:regular,italic,bold,bolditalic" rel="stylesheet" type="text/css">
+<link href="http://fonts.googleapis.com/css?family=PT+Sans:regular,italic,bold,bolditalic" rel="stylesheet" type="text/css">
+
+  
+
+</head>
+
+<body   >
+  <nav role="navigation"><div class="navbar">
+  <div class="navbar-inner">
+    <a class="brand" href="/mor_t/">Mor's dev blog</a>
+    <ul class="nav">
+      <li><a href="/mor_t/">Home</a></li>
+      <li><a href="/mor_t/blog/archives">Archives</a></li>
+    </ul>
+    <ul class="nav" data-subscription="rss">
+      <li><a href="/mor_t/atom.xml" rel="subscribe-rss" title="subscribe via RSS">RSS</a></li>
+      
+    </ul>
+      
+    <form class="navbar-form" action="https://www.google.com/search" method="get">
+      <fieldset role="search">
+        <input type="hidden" name="q" value="site:morm.github.io" />
+        <input class="span2" type="text" name="q" results="0" placeholder="Search"/>
+      </fieldset>
+    </form>
+      
+    
+  </div>
+</div>
+</nav>
+  <div class="wrapper_single">
+    <div class="container">
+      <div class="row">
+        <article class="span8 offset2" role="article">
+          <div class="article-format">
+
+  <header>
+    
+      
+        <h1 class="entry-title">RPC на C++ своими руками. Часть 1</h1>
+      
+    
+    
+      <p class="meta">
+        
+  
+
+
+  
+    <span class="byline author vcard">by <span class="fn">Mor</span></span>
+  
+
+ - 
+        
+
+
+
+
+
+
+
+
+  
+
+
+<time datetime="2014-01-05T20:56:05+04:00" pubdate data-updated="true"></time> - 
+        
+
+posted in
+<span class="categories">
+  
+    <a class='category' href='/blog/categories/rpc/'>rpc</a>
+  
+</span>
+
+
+        
+      </p>
+    
+  </header>
+
+
+  <div class="entry-content"><h1>RPC через CreateRemoteThread под Windows</h1>
+
+<p>Мое исследование возможных реализаций RPC. Для начала рассмотрим реализацию RPC через создание потока в удаленном процессе.</p>
+
+<!-- more -->
+
+
+<p>Одной из основных проблем при проектировании сложных систем является обеспечение взаимодействия между различными комплексами. Трудно представить, какое количество велосипедов было изобретено и ежеминутно куется в программных мануфактурах. Сетевое взаимодействие так возбуждает системных архитекторов, что они просто не могут остановиться и не написать протокол информационно-логического взаимодействия страниц так на 150. В таких протоколах обычно расписывается куча квитанций, которые обеспечивают надежность передачи данных. Самый эпичный велосипед, который я видел, реализовывал функциональность TCP поверх UDP.
+Интересно, что самый предпочтительный с точки зрения прозрачности и дальнейшей поддержки подход  – RPC – считается сложным и ресурсоемким. И, если с последним можно отчасти согласиться, то вот насчет сложности можно поспорить. Для того чтобы RPC стал простым и понятным, я решил для себя собрать возможные реализации RPC под различные платформы. Для начала попробую сделать вызов функции в другом исполняемом модуле под ОС Windows.</p>
+
+<h2>Исходные данные:</h2>
+
+<ul>
+<li>Есть два исполняемых модуля A.exe и B.exe</li>
+<li>В модуле B.exe есть функция foo
+
+<h2>Задача</h2></li>
+<li>Выполнить из модуля A.exe функцию foo
+
+<h2>Решение</h2>
+
+<p>Для того, чтобы вызвать функцию, нужно знать ее адрес. Не все знают, но любой исполняемый модуль (exe  и dll) может экспортировать функции. При импорте функции мы узнаем <a href="http://wiki.xakep.ru/rva-adres.ashx">RVA</a> функции в модуле. Для того чтобы получить полный адрес, нам нужно узнать базовый адрес загрузки модуля. Итак, в модуле B.exe объявляем функцию void foo() и экспортируем ее с помощью def файла.</p></li>
+</ul>
+
+
+<div class='bogus-wrapper'><notextile><figure class='code'><figcaption><span>Код модуля B  (main_B.cpp)</span> <a href='/downloads/code/simpleRPC/B/main_B.cpp'>download</a></figcaption>
+<div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+<span class='line-number'>12</span>
+<span class='line-number'>13</span>
+<span class='line-number'>14</span>
+<span class='line-number'>15</span>
+<span class='line-number'>16</span>
+<span class='line-number'>17</span>
+<span class='line-number'>18</span>
+<span class='line-number'>19</span>
+<span class='line-number'>20</span>
+<span class='line-number'>21</span>
+<span class='line-number'>22</span>
+<span class='line-number'>23</span>
+<span class='line-number'>24</span>
+<span class='line-number'>25</span>
+<span class='line-number'>26</span>
+<span class='line-number'>27</span>
+<span class='line-number'>28</span>
+<span class='line-number'>29</span>
+<span class='line-number'>30</span>
+</pre></td><td class='code'><pre><code class='cpp'><span class='line'><span class="cp">#include &lt;Windows.h&gt;</span>
+</span><span class='line'><span class="cp">#include &lt;tchar.h&gt;</span>
+</span><span class='line'>
+</span><span class='line'><span class="cp">#include &lt;thread&gt;</span>
+</span><span class='line'><span class="cp">#include &lt;chrono&gt;</span>
+</span><span class='line'><span class="cp">#include &lt;atomic&gt;</span>
+</span><span class='line'>
+</span><span class='line'><span class="n">std</span><span class="o">::</span><span class="n">atomic_flag</span> <span class="n">working</span> <span class="o">=</span> <span class="p">{</span><span class="nb">true</span><span class="p">};</span>
+</span><span class='line'>
+</span><span class='line'><span class="kt">void</span> <span class="nf">foo</span><span class="p">()</span>
+</span><span class='line'><span class="p">{</span>
+</span><span class='line'>  <span class="n">working</span><span class="p">.</span><span class="n">clear</span><span class="p">();</span>
+</span><span class='line'><span class="p">}</span>
+</span><span class='line'>
+</span><span class='line'><span class="kt">int</span> <span class="n">APIENTRY</span> <span class="nf">_tWinMain</span><span class="p">(</span><span class="n">HINSTANCE</span> <span class="n">hInstance</span><span class="p">,</span> <span class="n">HINSTANCE</span> <span class="n">hPrevInstance</span><span class="p">,</span> <span class="n">LPTSTR</span> <span class="n">lpCmdLine</span><span class="p">,</span> <span class="kt">int</span> <span class="n">nCmdShow</span><span class="p">)</span>
+</span><span class='line'><span class="p">{</span>
+</span><span class='line'>  <span class="k">auto</span> <span class="n">ev</span> <span class="o">=</span> <span class="n">OpenEvent</span><span class="p">(</span><span class="n">EVENT_ALL_ACCESS</span><span class="p">,</span> <span class="n">FALSE</span><span class="p">,</span> <span class="n">_T</span><span class="p">(</span><span class="s">&quot;B_ready_mutex&quot;</span><span class="p">));</span>
+</span><span class='line'>  <span class="n">SetEvent</span><span class="p">(</span><span class="n">ev</span><span class="p">);</span>
+</span><span class='line'>
+</span><span class='line'>  <span class="k">while</span><span class="p">(</span><span class="n">working</span><span class="p">.</span><span class="n">test_and_set</span><span class="p">())</span>
+</span><span class='line'>  <span class="p">{</span>
+</span><span class='line'>      <span class="n">std</span><span class="o">::</span><span class="n">this_thread</span><span class="o">::</span><span class="n">sleep_for</span><span class="p">(</span><span class="n">std</span><span class="o">::</span><span class="n">chrono</span><span class="o">::</span><span class="n">milliseconds</span><span class="p">(</span><span class="mi">1</span><span class="p">));</span>
+</span><span class='line'>  <span class="p">}</span>
+</span><span class='line'>  
+</span><span class='line'>  <span class="o">::</span><span class="n">MessageBox</span><span class="p">(</span><span class="nb">NULL</span><span class="p">,</span> <span class="n">_T</span><span class="p">(</span><span class="s">&quot;call succeeded&quot;</span><span class="p">),</span> <span class="n">_T</span><span class="p">(</span><span class="s">&quot;Remote Call&quot;</span><span class="p">),</span> <span class="n">MB_OK</span><span class="p">);</span>
+</span><span class='line'>
+</span><span class='line'>  <span class="n">CloseHandle</span><span class="p">(</span><span class="n">ev</span><span class="p">);</span>
+</span><span class='line'>
+</span><span class='line'>  <span class="k">return</span> <span class="mi">0</span><span class="p">;</span>
+</span><span class='line'><span class="p">}</span>
+</span></code></pre></td></tr></table></div></figure></notextile></div>
+
+
+
+
+<div class='bogus-wrapper'><notextile><figure class='code'><figcaption><span>Экспорт функции  (export.def)</span> <a href='/downloads/code/simpleRPC/B/export.def'>download</a></figcaption>
+<div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+</pre></td><td class='code'><pre><code class='cpp'><span class='line'><span class="n">EXPORTS</span>
+</span><span class='line'><span class="n">foo</span> <span class="err">@</span><span class="mi">1</span>
+</span></code></pre></td></tr></table></div></figure></notextile></div>
+
+
+<p>Итак, в модуле B.exe определена функция foo, которая при вызове выставит флаг working в значение false. После чего цикл в функции WinMain завершится после очередной итерации. Событие ev создается для того, чтобы модуль B.exe успел проинициализироваться прежде, чем мы начнем вызывать функцию foo.</p>
+
+<p>Модуль A будет посложнее.</p>
+
+<div class='bogus-wrapper'><notextile><figure class='code'><figcaption><span>Точка входа модуля A  (main_A.cpp)</span> <a href='/downloads/code/simpleRPC/A/main_A.cpp'>download</a></figcaption>
+<div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+<span class='line-number'>12</span>
+<span class='line-number'>13</span>
+<span class='line-number'>14</span>
+<span class='line-number'>15</span>
+<span class='line-number'>16</span>
+<span class='line-number'>17</span>
+<span class='line-number'>18</span>
+<span class='line-number'>19</span>
+<span class='line-number'>20</span>
+<span class='line-number'>21</span>
+<span class='line-number'>22</span>
+</pre></td><td class='code'><pre><code class='cpp'><span class='line'><span class="cp">#include &quot;rpc_caller.hpp&quot;</span>
+</span><span class='line'>
+</span><span class='line'><span class="cp">#include &lt;locale&gt;</span>
+</span><span class='line'>
+</span><span class='line'><span class="kt">int</span> <span class="nf">_tmain</span><span class="p">(</span><span class="kt">int</span> <span class="n">argc</span><span class="p">,</span> <span class="n">TCHAR</span><span class="o">*</span> <span class="n">argv</span><span class="p">[])</span>
+</span><span class='line'><span class="p">{</span>
+</span><span class='line'>  <span class="n">std</span><span class="o">::</span><span class="n">locale</span><span class="o">::</span><span class="n">global</span><span class="p">(</span><span class="n">std</span><span class="o">::</span><span class="n">locale</span><span class="p">(</span><span class="s">&quot;&quot;</span><span class="p">));</span>
+</span><span class='line'>
+</span><span class='line'>  <span class="n">TString</span> <span class="n">full_path</span><span class="p">(</span><span class="n">argv</span><span class="p">[</span><span class="mi">0</span><span class="p">]);</span>
+</span><span class='line'>  <span class="n">TString</span> <span class="n">path</span> <span class="o">=</span> <span class="n">full_path</span><span class="p">.</span><span class="n">substr</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="n">full_path</span><span class="p">.</span><span class="n">find_last_of</span><span class="p">(</span><span class="n">_T</span><span class="p">(</span><span class="s">&quot;/</span><span class="se">\\</span><span class="s">&quot;</span><span class="p">))</span> <span class="o">+</span> <span class="mi">1</span><span class="p">);</span>
+</span><span class='line'>  
+</span><span class='line'>  <span class="n">HandleHolder</span> <span class="n">ev</span><span class="p">(</span><span class="n">CreateEvent</span><span class="p">(</span><span class="nb">NULL</span><span class="p">,</span> <span class="n">FALSE</span><span class="p">,</span> <span class="n">FALSE</span><span class="p">,</span> <span class="n">_T</span><span class="p">(</span><span class="s">&quot;B_ready_mutex&quot;</span><span class="p">)));</span>
+</span><span class='line'>  
+</span><span class='line'>  <span class="kt">char</span> <span class="n">buf</span><span class="p">[</span><span class="mi">256</span><span class="p">];</span>
+</span><span class='line'>  <span class="n">wcstombs</span> <span class="p">(</span> <span class="n">buf</span><span class="p">,</span> <span class="p">(</span><span class="n">TString</span><span class="p">(</span><span class="n">_T</span><span class="p">(</span><span class="s">&quot;start &quot;</span><span class="p">))</span> <span class="o">+</span> <span class="n">path</span><span class="p">.</span><span class="n">c_str</span><span class="p">()</span> <span class="o">+</span> <span class="n">TString</span><span class="p">(</span><span class="n">_T</span><span class="p">(</span><span class="s">&quot;B.exe&quot;</span><span class="p">))).</span><span class="n">c_str</span><span class="p">(),</span> <span class="k">sizeof</span><span class="p">(</span><span class="n">buf</span><span class="p">)</span> <span class="p">);</span>
+</span><span class='line'>  <span class="n">std</span><span class="o">::</span><span class="n">system</span><span class="p">(</span><span class="n">buf</span><span class="p">);</span>
+</span><span class='line'>  
+</span><span class='line'>  <span class="k">if</span><span class="p">(</span><span class="n">WaitForSingleObject</span><span class="p">(</span><span class="n">ev</span><span class="p">(),</span> <span class="mi">3000</span><span class="p">)</span> <span class="o">==</span> <span class="n">WAIT_OBJECT_0</span><span class="p">)</span>
+</span><span class='line'>      <span class="n">RPC_caller</span><span class="p">(</span><span class="n">_T</span><span class="p">(</span><span class="s">&quot;B.exe&quot;</span><span class="p">)).</span><span class="n">call_in_ipc</span><span class="p">(</span><span class="s">&quot;foo&quot;</span><span class="p">);</span>
+</span><span class='line'>
+</span><span class='line'>  <span class="k">return</span> <span class="mi">0</span><span class="p">;</span>
+</span><span class='line'><span class="p">}</span>
+</span></code></pre></td></tr></table></div></figure></notextile></div>
+
+
+<p>Для начала получаем путь к B.exe. Этот танец с бубном вокруг path нужен для запуска по относительному пути в случае, если текущий путь отличается от папки где лежат A.exe и B.exe.</p>
+
+<div class='bogus-wrapper'><notextile><figure class='code'><figcaption><span>Класс удаленного вызова процедур  (rpc_caller.hpp)</span> <a href='/downloads/code/simpleRPC/A/rpc_caller.hpp'>download</a></figcaption>
+<div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+<span class='line-number'>12</span>
+<span class='line-number'>13</span>
+<span class='line-number'>14</span>
+<span class='line-number'>15</span>
+<span class='line-number'>16</span>
+<span class='line-number'>17</span>
+<span class='line-number'>18</span>
+<span class='line-number'>19</span>
+<span class='line-number'>20</span>
+<span class='line-number'>21</span>
+<span class='line-number'>22</span>
+<span class='line-number'>23</span>
+<span class='line-number'>24</span>
+<span class='line-number'>25</span>
+<span class='line-number'>26</span>
+<span class='line-number'>27</span>
+<span class='line-number'>28</span>
+<span class='line-number'>29</span>
+<span class='line-number'>30</span>
+<span class='line-number'>31</span>
+<span class='line-number'>32</span>
+<span class='line-number'>33</span>
+<span class='line-number'>34</span>
+<span class='line-number'>35</span>
+<span class='line-number'>36</span>
+<span class='line-number'>37</span>
+<span class='line-number'>38</span>
+<span class='line-number'>39</span>
+<span class='line-number'>40</span>
+<span class='line-number'>41</span>
+<span class='line-number'>42</span>
+<span class='line-number'>43</span>
+<span class='line-number'>44</span>
+<span class='line-number'>45</span>
+<span class='line-number'>46</span>
+<span class='line-number'>47</span>
+<span class='line-number'>48</span>
+<span class='line-number'>49</span>
+<span class='line-number'>50</span>
+<span class='line-number'>51</span>
+<span class='line-number'>52</span>
+<span class='line-number'>53</span>
+<span class='line-number'>54</span>
+<span class='line-number'>55</span>
+<span class='line-number'>56</span>
+<span class='line-number'>57</span>
+<span class='line-number'>58</span>
+<span class='line-number'>59</span>
+<span class='line-number'>60</span>
+<span class='line-number'>61</span>
+<span class='line-number'>62</span>
+<span class='line-number'>63</span>
+<span class='line-number'>64</span>
+<span class='line-number'>65</span>
+<span class='line-number'>66</span>
+<span class='line-number'>67</span>
+<span class='line-number'>68</span>
+<span class='line-number'>69</span>
+<span class='line-number'>70</span>
+<span class='line-number'>71</span>
+<span class='line-number'>72</span>
+<span class='line-number'>73</span>
+<span class='line-number'>74</span>
+<span class='line-number'>75</span>
+<span class='line-number'>76</span>
+<span class='line-number'>77</span>
+<span class='line-number'>78</span>
+<span class='line-number'>79</span>
+<span class='line-number'>80</span>
+<span class='line-number'>81</span>
+<span class='line-number'>82</span>
+<span class='line-number'>83</span>
+<span class='line-number'>84</span>
+<span class='line-number'>85</span>
+<span class='line-number'>86</span>
+<span class='line-number'>87</span>
+<span class='line-number'>88</span>
+<span class='line-number'>89</span>
+<span class='line-number'>90</span>
+<span class='line-number'>91</span>
+<span class='line-number'>92</span>
+<span class='line-number'>93</span>
+<span class='line-number'>94</span>
+<span class='line-number'>95</span>
+<span class='line-number'>96</span>
+<span class='line-number'>97</span>
+<span class='line-number'>98</span>
+<span class='line-number'>99</span>
+<span class='line-number'>100</span>
+<span class='line-number'>101</span>
+<span class='line-number'>102</span>
+<span class='line-number'>103</span>
+<span class='line-number'>104</span>
+<span class='line-number'>105</span>
+<span class='line-number'>106</span>
+<span class='line-number'>107</span>
+<span class='line-number'>108</span>
+<span class='line-number'>109</span>
+<span class='line-number'>110</span>
+<span class='line-number'>111</span>
+<span class='line-number'>112</span>
+<span class='line-number'>113</span>
+<span class='line-number'>114</span>
+<span class='line-number'>115</span>
+<span class='line-number'>116</span>
+<span class='line-number'>117</span>
+<span class='line-number'>118</span>
+<span class='line-number'>119</span>
+<span class='line-number'>120</span>
+<span class='line-number'>121</span>
+<span class='line-number'>122</span>
+<span class='line-number'>123</span>
+<span class='line-number'>124</span>
+<span class='line-number'>125</span>
+<span class='line-number'>126</span>
+<span class='line-number'>127</span>
+<span class='line-number'>128</span>
+<span class='line-number'>129</span>
+<span class='line-number'>130</span>
+<span class='line-number'>131</span>
+<span class='line-number'>132</span>
+<span class='line-number'>133</span>
+<span class='line-number'>134</span>
+</pre></td><td class='code'><pre><code class='cpp'><span class='line'><span class="cp">#ifndef RPC_CALLER_HPP</span>
+</span><span class='line'><span class="cp">#define RPC_CALLER_HPP</span>
+</span><span class='line'>
+</span><span class='line'><span class="cp">#pragma comment( lib, &quot;psapi&quot; )</span>
+</span><span class='line'>
+</span><span class='line'><span class="cp">#include &lt;Windows.h&gt;</span>
+</span><span class='line'><span class="cp">#include &lt;tchar.h&gt;</span>
+</span><span class='line'>
+</span><span class='line'><span class="cp">#include &lt;tlhelp32.h&gt;</span>
+</span><span class='line'><span class="cp">#include &lt;Psapi.h&gt;</span>
+</span><span class='line'>
+</span><span class='line'><span class="cp">#include &lt;vector&gt;</span>
+</span><span class='line'><span class="cp">#include &lt;string&gt;</span>
+</span><span class='line'><span class="cp">#include &lt;cstdint&gt;</span>
+</span><span class='line'>
+</span><span class='line'><span class="k">typedef</span> <span class="n">std</span><span class="o">::</span><span class="n">basic_string</span><span class="o">&lt;</span><span class="n">TCHAR</span><span class="p">,</span> <span class="n">std</span><span class="o">::</span><span class="n">char_traits</span><span class="o">&lt;</span><span class="n">TCHAR</span><span class="o">&gt;</span><span class="p">,</span> <span class="n">std</span><span class="o">::</span><span class="n">allocator</span><span class="o">&lt;</span><span class="n">TCHAR</span><span class="o">&gt;</span> <span class="o">&gt;</span> <span class="n">TString</span><span class="p">;</span>
+</span><span class='line'>
+</span><span class='line'><span class="k">class</span> <span class="nc">LibHolder</span>
+</span><span class='line'><span class="p">{</span>
+</span><span class='line'><span class="k">public</span><span class="o">:</span>
+</span><span class='line'>  <span class="n">LibHolder</span><span class="p">(</span><span class="n">HMODULE</span> <span class="n">hLib</span><span class="p">)</span> <span class="o">:</span> <span class="n">_hLib</span><span class="p">(</span><span class="n">hLib</span><span class="p">){}</span>
+</span><span class='line'>  <span class="o">~</span><span class="n">LibHolder</span><span class="p">()</span>
+</span><span class='line'>  <span class="p">{</span>
+</span><span class='line'>      <span class="k">if</span><span class="p">(</span><span class="n">_hLib</span><span class="p">)</span>
+</span><span class='line'>          <span class="n">FreeLibrary</span><span class="p">(</span><span class="n">_hLib</span><span class="p">);</span>
+</span><span class='line'>  <span class="p">}</span>
+</span><span class='line'>  <span class="n">HMODULE</span> <span class="k">operator</span><span class="p">()()</span>
+</span><span class='line'>  <span class="p">{</span>
+</span><span class='line'>      <span class="k">return</span> <span class="n">_hLib</span><span class="p">;</span>
+</span><span class='line'>  <span class="p">}</span>
+</span><span class='line'><span class="k">private</span><span class="o">:</span>
+</span><span class='line'>  <span class="n">HMODULE</span> <span class="n">_hLib</span><span class="p">;</span>
+</span><span class='line'><span class="p">};</span>
+</span><span class='line'>
+</span><span class='line'><span class="k">class</span> <span class="nc">HandleHolder</span>
+</span><span class='line'><span class="p">{</span>
+</span><span class='line'><span class="k">public</span><span class="o">:</span>
+</span><span class='line'>  <span class="n">HandleHolder</span><span class="p">(</span><span class="n">HANDLE</span> <span class="n">handle</span><span class="p">)</span> <span class="o">:</span> <span class="n">_handle</span><span class="p">(</span><span class="n">handle</span><span class="p">){}</span>
+</span><span class='line'>  <span class="o">~</span><span class="n">HandleHolder</span><span class="p">()</span>
+</span><span class='line'>  <span class="p">{</span>
+</span><span class='line'>      <span class="k">if</span><span class="p">(</span><span class="n">_handle</span><span class="p">)</span>
+</span><span class='line'>          <span class="n">CloseHandle</span><span class="p">(</span><span class="n">_handle</span><span class="p">);</span>
+</span><span class='line'>  <span class="p">}</span>
+</span><span class='line'>  <span class="n">HANDLE</span> <span class="k">operator</span><span class="p">()()</span>
+</span><span class='line'>  <span class="p">{</span>
+</span><span class='line'>      <span class="k">return</span> <span class="n">_handle</span><span class="p">;</span>
+</span><span class='line'>  <span class="p">}</span>
+</span><span class='line'><span class="k">private</span><span class="o">:</span>
+</span><span class='line'>  <span class="n">HANDLE</span> <span class="n">_handle</span><span class="p">;</span>
+</span><span class='line'><span class="p">};</span>
+</span><span class='line'>
+</span><span class='line'><span class="k">class</span> <span class="nc">RPC_caller</span>
+</span><span class='line'><span class="p">{</span>
+</span><span class='line'><span class="k">public</span><span class="o">:</span>
+</span><span class='line'>  <span class="k">explicit</span> <span class="n">RPC_caller</span><span class="p">(</span><span class="k">const</span> <span class="n">TString</span><span class="o">&amp;</span> <span class="n">module_name</span><span class="p">)</span> <span class="o">:</span> <span class="n">mod_name</span><span class="p">(</span><span class="n">module_name</span><span class="p">){}</span>
+</span><span class='line'>
+</span><span class='line'>  <span class="kt">bool</span> <span class="n">call_in_ipc</span><span class="p">(</span><span class="k">const</span> <span class="n">std</span><span class="o">::</span><span class="n">string</span><span class="o">&amp;</span> <span class="n">func_name</span><span class="p">)</span>
+</span><span class='line'>  <span class="p">{</span>
+</span><span class='line'>      <span class="kt">bool</span> <span class="n">res</span> <span class="o">=</span> <span class="nb">false</span><span class="p">;</span>
+</span><span class='line'>      <span class="n">LibHolder</span> <span class="nf">hModule</span><span class="p">(</span><span class="n">LoadLibraryEx</span><span class="p">(</span><span class="n">mod_name</span><span class="p">.</span><span class="n">c_str</span><span class="p">(),</span> <span class="nb">NULL</span><span class="p">,</span> <span class="mi">0</span><span class="p">));</span>
+</span><span class='line'>      
+</span><span class='line'>      <span class="n">std</span><span class="o">::</span><span class="kt">uintptr_t</span> <span class="n">remote_proc</span> <span class="o">=</span> <span class="p">(</span><span class="n">std</span><span class="o">::</span><span class="kt">uintptr_t</span><span class="p">)</span><span class="n">GetProcAddress</span><span class="p">(</span><span class="n">hModule</span><span class="p">(),</span> <span class="n">func_name</span><span class="p">.</span><span class="n">c_str</span><span class="p">());</span>
+</span><span class='line'>      <span class="k">if</span><span class="p">(</span><span class="o">!</span><span class="n">remote_proc</span><span class="p">)</span>
+</span><span class='line'>          <span class="k">return</span> <span class="n">res</span><span class="p">;</span>
+</span><span class='line'>
+</span><span class='line'>
+</span><span class='line'>      <span class="n">PROCESSENTRY32</span> <span class="n">entry</span><span class="p">;</span>
+</span><span class='line'>      <span class="n">entry</span><span class="p">.</span><span class="n">dwSize</span> <span class="o">=</span> <span class="k">sizeof</span><span class="p">(</span><span class="n">PROCESSENTRY32</span><span class="p">);</span>
+</span><span class='line'>
+</span><span class='line'>      <span class="n">HandleHolder</span> <span class="nf">snapshot</span><span class="p">(</span><span class="n">CreateToolhelp32Snapshot</span><span class="p">(</span><span class="n">TH32CS_SNAPPROCESS</span><span class="p">,</span> <span class="nb">NULL</span><span class="p">));</span>
+</span><span class='line'>
+</span><span class='line'>      <span class="k">if</span> <span class="p">(</span><span class="n">Process32First</span><span class="p">(</span><span class="n">snapshot</span><span class="p">(),</span> <span class="o">&amp;</span><span class="n">entry</span><span class="p">)</span> <span class="o">==</span> <span class="n">TRUE</span><span class="p">)</span>
+</span><span class='line'>      <span class="p">{</span>
+</span><span class='line'>          <span class="k">while</span> <span class="p">(</span><span class="n">Process32Next</span><span class="p">(</span><span class="n">snapshot</span><span class="p">(),</span> <span class="o">&amp;</span><span class="n">entry</span><span class="p">)</span> <span class="o">==</span> <span class="n">TRUE</span><span class="p">)</span>
+</span><span class='line'>          <span class="p">{</span>
+</span><span class='line'>              <span class="k">if</span> <span class="p">(</span><span class="n">mod_name</span><span class="p">.</span><span class="n">compare</span><span class="p">(</span><span class="n">entry</span><span class="p">.</span><span class="n">szExeFile</span><span class="p">)</span> <span class="o">==</span> <span class="mi">0</span><span class="p">)</span>
+</span><span class='line'>              <span class="p">{</span>
+</span><span class='line'>                  <span class="n">HandleHolder</span> <span class="n">hProcess</span><span class="p">(</span><span class="n">OpenProcess</span><span class="p">(</span><span class="n">PROCESS_ALL_ACCESS</span><span class="p">,</span> <span class="n">FALSE</span><span class="p">,</span> <span class="n">entry</span><span class="p">.</span><span class="n">th32ProcessID</span><span class="p">));</span>
+</span><span class='line'>                  <span class="k">if</span><span class="p">(</span><span class="o">!</span><span class="n">hProcess</span><span class="p">())</span>
+</span><span class='line'>                      <span class="k">continue</span><span class="p">;</span>
+</span><span class='line'>
+</span><span class='line'>                  <span class="n">res</span> <span class="o">=</span> <span class="n">run</span><span class="p">(</span><span class="n">hProcess</span><span class="p">(),</span> <span class="n">remote_proc</span> <span class="o">-</span> <span class="p">(</span><span class="n">std</span><span class="o">::</span><span class="kt">uintptr_t</span><span class="p">)</span><span class="n">hModule</span><span class="p">(),</span> <span class="n">func_name</span><span class="p">);</span>
+</span><span class='line'>
+</span><span class='line'>                  <span class="k">break</span><span class="p">;</span>
+</span><span class='line'>              <span class="p">}</span>
+</span><span class='line'>          <span class="p">}</span>
+</span><span class='line'>      <span class="p">}</span>
+</span><span class='line'>
+</span><span class='line'>      <span class="k">return</span> <span class="n">res</span><span class="p">;</span>
+</span><span class='line'>  <span class="p">}</span>
+</span><span class='line'><span class="k">private</span><span class="o">:</span>
+</span><span class='line'>  <span class="kt">bool</span> <span class="n">run</span><span class="p">(</span><span class="n">HANDLE</span> <span class="n">hProcess</span><span class="p">,</span> <span class="n">std</span><span class="o">::</span><span class="kt">uintptr_t</span> <span class="n">remote_proc</span><span class="p">,</span> <span class="k">const</span> <span class="n">std</span><span class="o">::</span><span class="n">string</span><span class="o">&amp;</span> <span class="n">func_name</span><span class="p">)</span>
+</span><span class='line'>  <span class="p">{</span>
+</span><span class='line'>      <span class="kt">void</span><span class="o">*</span> <span class="n">param</span> <span class="o">=</span> <span class="k">nullptr</span><span class="p">;</span>
+</span><span class='line'>
+</span><span class='line'>      <span class="n">std</span><span class="o">::</span><span class="kt">uintptr_t</span> <span class="n">addr</span> <span class="o">=</span> <span class="k">this</span><span class="o">-&gt;</span><span class="n">GetModuleBase</span><span class="p">(</span><span class="n">hProcess</span><span class="p">,</span> <span class="n">mod_name</span><span class="p">)</span> <span class="o">+</span> <span class="n">remote_proc</span><span class="p">;</span>
+</span><span class='line'>      <span class="k">auto</span> <span class="n">hThread</span> <span class="o">=</span> <span class="n">CreateRemoteThreadEx</span><span class="p">(</span><span class="n">hProcess</span><span class="p">,</span> <span class="nb">NULL</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="p">(</span><span class="n">LPTHREAD_START_ROUTINE</span><span class="p">)(</span><span class="n">addr</span><span class="p">),</span> <span class="n">param</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="nb">NULL</span><span class="p">,</span> <span class="nb">NULL</span><span class="p">);</span>
+</span><span class='line'>      <span class="k">return</span> <span class="p">(</span><span class="n">WaitForSingleObject</span><span class="p">(</span><span class="n">hThread</span><span class="p">,</span> <span class="mi">3000</span><span class="p">)</span> <span class="o">==</span> <span class="n">WAIT_OBJECT_0</span><span class="p">);</span>
+</span><span class='line'>
+</span><span class='line'>  <span class="p">}</span>
+</span><span class='line'>  <span class="n">std</span><span class="o">::</span><span class="kt">uintptr_t</span> <span class="n">GetModuleBase</span><span class="p">(</span><span class="n">HANDLE</span> <span class="n">hProc</span><span class="p">,</span> <span class="k">const</span> <span class="n">TString</span><span class="o">&amp;</span> <span class="n">sModuleName</span><span class="p">)</span>
+</span><span class='line'>  <span class="p">{</span>
+</span><span class='line'>      <span class="n">TCHAR</span> <span class="n">szBuf</span><span class="p">[</span><span class="mi">255</span><span class="p">];</span>
+</span><span class='line'>      <span class="n">DWORD</span> <span class="n">cModules</span> <span class="o">=</span> <span class="mi">0</span><span class="p">;</span>
+</span><span class='line'>      <span class="n">std</span><span class="o">::</span><span class="kt">uintptr_t</span> <span class="n">dwBase</span> <span class="o">=</span> <span class="o">-</span><span class="mi">1</span><span class="p">;</span>
+</span><span class='line'>
+</span><span class='line'>      <span class="n">EnumProcessModules</span><span class="p">(</span><span class="n">hProc</span><span class="p">,</span> <span class="nb">NULL</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">cModules</span><span class="p">);</span>
+</span><span class='line'>      
+</span><span class='line'>      <span class="n">DWORD</span> <span class="n">len</span> <span class="o">=</span> <span class="n">cModules</span><span class="o">/</span><span class="k">sizeof</span><span class="p">(</span><span class="n">HMODULE</span><span class="p">);</span>
+</span><span class='line'>      <span class="n">std</span><span class="o">::</span><span class="n">vector</span><span class="o">&lt;</span><span class="n">HMODULE</span><span class="o">&gt;</span> <span class="n">hModules</span><span class="p">(</span><span class="n">len</span><span class="p">);</span>
+</span><span class='line'>
+</span><span class='line'>      <span class="k">if</span><span class="p">(</span><span class="n">EnumProcessModulesEx</span><span class="p">(</span><span class="n">hProc</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">hModules</span><span class="p">.</span><span class="n">front</span><span class="p">(),</span> <span class="n">len</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">cModules</span><span class="p">,</span> <span class="n">LIST_MODULES_ALL</span><span class="p">))</span>
+</span><span class='line'>      <span class="p">{</span>
+</span><span class='line'>          <span class="k">for</span><span class="p">(</span><span class="n">std</span><span class="o">::</span><span class="kt">size_t</span> <span class="n">i</span> <span class="o">=</span> <span class="mi">0</span><span class="p">;</span> <span class="n">i</span> <span class="o">&lt;</span> <span class="n">len</span><span class="p">;</span> <span class="o">++</span><span class="n">i</span><span class="p">)</span>
+</span><span class='line'>          <span class="p">{</span>
+</span><span class='line'>              <span class="k">if</span><span class="p">(</span><span class="n">GetModuleBaseName</span><span class="p">(</span><span class="n">hProc</span><span class="p">,</span> <span class="n">hModules</span><span class="p">[</span><span class="n">i</span><span class="p">],</span> <span class="n">szBuf</span><span class="p">,</span> <span class="k">sizeof</span><span class="p">(</span><span class="n">szBuf</span><span class="p">)))</span>
+</span><span class='line'>              <span class="p">{</span>
+</span><span class='line'>                  <span class="k">if</span><span class="p">(</span><span class="n">sModuleName</span><span class="p">.</span><span class="n">compare</span><span class="p">(</span><span class="n">szBuf</span><span class="p">)</span> <span class="o">==</span> <span class="mi">0</span><span class="p">)</span>
+</span><span class='line'>                  <span class="p">{</span>
+</span><span class='line'>                      <span class="n">dwBase</span> <span class="o">=</span> <span class="k">reinterpret_cast</span><span class="o">&lt;</span><span class="n">std</span><span class="o">::</span><span class="kt">uintptr_t</span><span class="o">&gt;</span><span class="p">(</span><span class="n">hModules</span><span class="p">[</span><span class="n">i</span><span class="p">]);</span>
+</span><span class='line'>                      <span class="k">break</span><span class="p">;</span>
+</span><span class='line'>                  <span class="p">}</span>
+</span><span class='line'>              <span class="p">}</span>
+</span><span class='line'>          <span class="p">}</span>
+</span><span class='line'>          <span class="n">len</span> <span class="o">=</span> <span class="n">cModules</span><span class="o">/</span><span class="k">sizeof</span><span class="p">(</span><span class="n">HMODULE</span><span class="p">);</span>
+</span><span class='line'>          <span class="n">hModules</span><span class="p">.</span><span class="n">resize</span><span class="p">(</span><span class="n">len</span><span class="p">);</span>
+</span><span class='line'>      <span class="p">}</span>
+</span><span class='line'>
+</span><span class='line'>      <span class="k">return</span> <span class="n">dwBase</span><span class="p">;</span>
+</span><span class='line'>  <span class="p">}</span>
+</span><span class='line'><span class="k">private</span><span class="o">:</span>
+</span><span class='line'>  <span class="n">TString</span> <span class="n">mod_name</span><span class="p">;</span>
+</span><span class='line'><span class="p">};</span>
+</span><span class='line'><span class="cp">#endif</span>
+</span></code></pre></td></tr></table></div></figure></notextile></div>
+
+
+<p>Надеюсь, отсутствие комментариев не смущает, потому что код достаточно красноречив.
+Итак, для чего нужен <em>RPC_caller</em>?
+Функция <em>call_in_ipc</em>, собственно, вызывает удаленную функцию.</p>
+
+<ul>
+<li>Для начала <strong>получаем RVA</strong> удаленной функции.</li>
+</ul>
+
+
+<div class='bogus-wrapper'><notextile><figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+</pre></td><td class='code'><pre><code class='cpp'><span class='line'>  <span class="n">LibHolder</span> <span class="nf">hModule</span><span class="p">(</span><span class="n">LoadLibraryEx</span><span class="p">(</span><span class="n">mod_name</span><span class="p">.</span><span class="n">c_str</span><span class="p">(),</span> <span class="nb">NULL</span><span class="p">,</span> <span class="mi">0</span><span class="p">));</span>
+</span><span class='line'>
+</span><span class='line'>  <span class="n">std</span><span class="o">::</span><span class="kt">uintptr_t</span> <span class="n">remote_proc</span> <span class="o">=</span> <span class="p">(</span><span class="n">std</span><span class="o">::</span><span class="kt">uintptr_t</span><span class="p">)</span><span class="n">GetProcAddress</span><span class="p">(</span><span class="n">hModule</span><span class="p">(),</span> <span class="n">func_name</span><span class="p">.</span><span class="n">c_str</span><span class="p">());</span>
+</span><span class='line'>  <span class="k">if</span><span class="p">(</span><span class="o">!</span><span class="n">remote_proc</span><span class="p">)</span>
+</span><span class='line'>      <span class="k">return</span> <span class="n">res</span><span class="p">;</span>
+</span></code></pre></td></tr></table></div></figure></notextile></div>
+
+
+<ul>
+<li>Затем <strong>делаем копию списка текущих процессов</strong>. В этом списке нам нужно найти целевой модуль, из которого мы будем вызывать функцию.</li>
+</ul>
+
+
+<div class='bogus-wrapper'><notextile><figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+<span class='line-number'>12</span>
+<span class='line-number'>13</span>
+<span class='line-number'>14</span>
+<span class='line-number'>15</span>
+<span class='line-number'>16</span>
+<span class='line-number'>17</span>
+<span class='line-number'>18</span>
+</pre></td><td class='code'><pre><code class='cpp'><span class='line'> <span class="n">HandleHolder</span> <span class="nf">snapshot</span><span class="p">(</span><span class="n">CreateToolhelp32Snapshot</span><span class="p">(</span><span class="n">TH32CS_SNAPPROCESS</span><span class="p">,</span> <span class="nb">NULL</span><span class="p">));</span>
+</span><span class='line'>
+</span><span class='line'>  <span class="k">if</span> <span class="p">(</span><span class="n">Process32First</span><span class="p">(</span><span class="n">snapshot</span><span class="p">(),</span> <span class="o">&amp;</span><span class="n">entry</span><span class="p">)</span> <span class="o">==</span> <span class="n">TRUE</span><span class="p">)</span>
+</span><span class='line'>  <span class="p">{</span>
+</span><span class='line'>      <span class="k">while</span> <span class="p">(</span><span class="n">Process32Next</span><span class="p">(</span><span class="n">snapshot</span><span class="p">(),</span> <span class="o">&amp;</span><span class="n">entry</span><span class="p">)</span> <span class="o">==</span> <span class="n">TRUE</span><span class="p">)</span>
+</span><span class='line'>      <span class="p">{</span>
+</span><span class='line'>          <span class="k">if</span> <span class="p">(</span><span class="n">mod_name</span><span class="p">.</span><span class="n">compare</span><span class="p">(</span><span class="n">entry</span><span class="p">.</span><span class="n">szExeFile</span><span class="p">)</span> <span class="o">==</span> <span class="mi">0</span><span class="p">)</span>
+</span><span class='line'>          <span class="p">{</span>
+</span><span class='line'>              <span class="n">HandleHolder</span> <span class="n">hProcess</span><span class="p">(</span><span class="n">OpenProcess</span><span class="p">(</span><span class="n">PROCESS_ALL_ACCESS</span><span class="p">,</span> <span class="n">FALSE</span><span class="p">,</span> <span class="n">entry</span><span class="p">.</span><span class="n">th32ProcessID</span><span class="p">));</span>
+</span><span class='line'>              <span class="k">if</span><span class="p">(</span><span class="o">!</span><span class="n">hProcess</span><span class="p">())</span>
+</span><span class='line'>                  <span class="k">continue</span><span class="p">;</span>
+</span><span class='line'>
+</span><span class='line'>              <span class="n">res</span> <span class="o">=</span> <span class="n">run</span><span class="p">(</span><span class="n">hProcess</span><span class="p">(),</span> <span class="n">remote_proc</span> <span class="o">-</span> <span class="p">(</span><span class="n">std</span><span class="o">::</span><span class="kt">uintptr_t</span><span class="p">)</span><span class="n">hModule</span><span class="p">(),</span> <span class="n">func_name</span><span class="p">);</span>
+</span><span class='line'>
+</span><span class='line'>              <span class="k">break</span><span class="p">;</span>
+</span><span class='line'>          <span class="p">}</span>
+</span><span class='line'>      <span class="p">}</span>
+</span><span class='line'>  <span class="p">}</span>
+</span></code></pre></td></tr></table></div></figure></notextile></div>
+
+
+<p></p>
+
+<ul>
+<li>После того как мы найдем искомый модуль, необходимо <strong>определить адрес загрузки модуля</strong>. Собственно, после этого нам остается только сложить базовый адрес модуля и RVA функции - в результате получаем реальный адрес в удаленном модуле.</li>
+</ul>
+
+
+<div class='bogus-wrapper'><notextile><figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+<span class='line-number'>12</span>
+<span class='line-number'>13</span>
+<span class='line-number'>14</span>
+<span class='line-number'>15</span>
+<span class='line-number'>16</span>
+<span class='line-number'>17</span>
+<span class='line-number'>18</span>
+<span class='line-number'>19</span>
+<span class='line-number'>20</span>
+<span class='line-number'>21</span>
+<span class='line-number'>22</span>
+<span class='line-number'>23</span>
+<span class='line-number'>24</span>
+<span class='line-number'>25</span>
+<span class='line-number'>26</span>
+<span class='line-number'>27</span>
+<span class='line-number'>28</span>
+<span class='line-number'>29</span>
+<span class='line-number'>30</span>
+</pre></td><td class='code'><pre><code class='cpp'><span class='line'>  <span class="n">std</span><span class="o">::</span><span class="kt">uintptr_t</span> <span class="n">GetModuleBase</span><span class="p">(</span><span class="n">HANDLE</span> <span class="n">hProc</span><span class="p">,</span> <span class="k">const</span> <span class="n">TString</span><span class="o">&amp;</span> <span class="n">sModuleName</span><span class="p">)</span>
+</span><span class='line'>  <span class="p">{</span>
+</span><span class='line'>      <span class="n">TCHAR</span> <span class="n">szBuf</span><span class="p">[</span><span class="mi">255</span><span class="p">];</span>
+</span><span class='line'>      <span class="n">DWORD</span> <span class="n">cModules</span> <span class="o">=</span> <span class="mi">0</span><span class="p">;</span>
+</span><span class='line'>      <span class="n">std</span><span class="o">::</span><span class="kt">uintptr_t</span> <span class="n">dwBase</span> <span class="o">=</span> <span class="o">-</span><span class="mi">1</span><span class="p">;</span>
+</span><span class='line'>
+</span><span class='line'>      <span class="n">EnumProcessModules</span><span class="p">(</span><span class="n">hProc</span><span class="p">,</span> <span class="nb">NULL</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">cModules</span><span class="p">);</span>
+</span><span class='line'>
+</span><span class='line'>      <span class="n">DWORD</span> <span class="n">len</span> <span class="o">=</span> <span class="n">cModules</span><span class="o">/</span><span class="k">sizeof</span><span class="p">(</span><span class="n">HMODULE</span><span class="p">);</span>
+</span><span class='line'>      <span class="n">std</span><span class="o">::</span><span class="n">vector</span><span class="o">&lt;</span><span class="n">HMODULE</span><span class="o">&gt;</span> <span class="n">hModules</span><span class="p">(</span><span class="n">len</span><span class="p">);</span>
+</span><span class='line'>
+</span><span class='line'>      <span class="k">if</span><span class="p">(</span><span class="n">EnumProcessModulesEx</span><span class="p">(</span><span class="n">hProc</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">hModules</span><span class="p">.</span><span class="n">front</span><span class="p">(),</span> <span class="n">len</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">cModules</span><span class="p">,</span> <span class="n">LIST_MODULES_ALL</span><span class="p">))</span>
+</span><span class='line'>      <span class="p">{</span>
+</span><span class='line'>          <span class="k">for</span><span class="p">(</span><span class="n">std</span><span class="o">::</span><span class="kt">size_t</span> <span class="n">i</span> <span class="o">=</span> <span class="mi">0</span><span class="p">;</span> <span class="n">i</span> <span class="o">&lt;</span> <span class="n">len</span><span class="p">;</span> <span class="o">++</span><span class="n">i</span><span class="p">)</span>
+</span><span class='line'>          <span class="p">{</span>
+</span><span class='line'>              <span class="k">if</span><span class="p">(</span><span class="n">GetModuleBaseName</span><span class="p">(</span><span class="n">hProc</span><span class="p">,</span> <span class="n">hModules</span><span class="p">[</span><span class="n">i</span><span class="p">],</span> <span class="n">szBuf</span><span class="p">,</span> <span class="k">sizeof</span><span class="p">(</span><span class="n">szBuf</span><span class="p">)))</span>
+</span><span class='line'>              <span class="p">{</span>
+</span><span class='line'>                  <span class="k">if</span><span class="p">(</span><span class="n">sModuleName</span><span class="p">.</span><span class="n">compare</span><span class="p">(</span><span class="n">szBuf</span><span class="p">)</span> <span class="o">==</span> <span class="mi">0</span><span class="p">)</span>
+</span><span class='line'>                  <span class="p">{</span>
+</span><span class='line'>                      <span class="n">dwBase</span> <span class="o">=</span> <span class="k">reinterpret_cast</span><span class="o">&lt;</span><span class="n">std</span><span class="o">::</span><span class="kt">uintptr_t</span><span class="o">&gt;</span><span class="p">(</span><span class="n">hModules</span><span class="p">[</span><span class="n">i</span><span class="p">]);</span>
+</span><span class='line'>                      <span class="k">break</span><span class="p">;</span>
+</span><span class='line'>                  <span class="p">}</span>
+</span><span class='line'>              <span class="p">}</span>
+</span><span class='line'>          <span class="p">}</span>
+</span><span class='line'>          <span class="n">len</span> <span class="o">=</span> <span class="n">cModules</span><span class="o">/</span><span class="k">sizeof</span><span class="p">(</span><span class="n">HMODULE</span><span class="p">);</span>
+</span><span class='line'>          <span class="n">hModules</span><span class="p">.</span><span class="n">resize</span><span class="p">(</span><span class="n">len</span><span class="p">);</span>
+</span><span class='line'>      <span class="p">}</span>
+</span><span class='line'>
+</span><span class='line'>      <span class="k">return</span> <span class="n">dwBase</span><span class="p">;</span>
+</span><span class='line'>  <span class="p">}</span>
+</span></code></pre></td></tr></table></div></figure></notextile></div>
+
+
+<ul>
+<li>Теперь дело осталось за малым – запустить функцию в адресном пространстве другого процесса. Для этого в Windows существует функция <em>CreateRemoteThread</em>. Эта функция <strong>создает поток в целевом процессе, который выполняет заданную функцию</strong>. Собственно, поэтому в B.exe я использовал <em>std::atomic_flag</em>.</li>
+</ul>
+
+
+<div class='bogus-wrapper'><notextile><figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+</pre></td><td class='code'><pre><code class='cpp'><span class='line'>  <span class="kt">bool</span> <span class="nf">run</span><span class="p">(</span><span class="n">HANDLE</span> <span class="n">hProcess</span><span class="p">,</span> <span class="n">std</span><span class="o">::</span><span class="kt">uintptr_t</span> <span class="n">remote_proc</span><span class="p">,</span> <span class="k">const</span> <span class="n">std</span><span class="o">::</span><span class="n">string</span><span class="o">&amp;</span> <span class="n">func_name</span><span class="p">)</span>
+</span><span class='line'>  <span class="p">{</span>
+</span><span class='line'>      <span class="kt">void</span><span class="o">*</span> <span class="n">param</span> <span class="o">=</span> <span class="k">nullptr</span><span class="p">;</span>
+</span><span class='line'>
+</span><span class='line'>      <span class="n">std</span><span class="o">::</span><span class="kt">uintptr_t</span> <span class="n">addr</span> <span class="o">=</span> <span class="k">this</span><span class="o">-&gt;</span><span class="n">GetModuleBase</span><span class="p">(</span><span class="n">hProcess</span><span class="p">,</span> <span class="n">mod_name</span><span class="p">)</span> <span class="o">+</span> <span class="n">remote_proc</span><span class="p">;</span>
+</span><span class='line'>      <span class="k">auto</span> <span class="n">hThread</span> <span class="o">=</span> <span class="n">CreateRemoteThreadEx</span><span class="p">(</span><span class="n">hProcess</span><span class="p">,</span> <span class="nb">NULL</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="p">(</span><span class="n">LPTHREAD_START_ROUTINE</span><span class="p">)(</span><span class="n">addr</span><span class="p">),</span> <span class="n">param</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="nb">NULL</span><span class="p">,</span> <span class="nb">NULL</span><span class="p">);</span>
+</span><span class='line'>      <span class="k">return</span> <span class="p">(</span><span class="n">WaitForSingleObject</span><span class="p">(</span><span class="n">hThread</span><span class="p">,</span> <span class="mi">3000</span><span class="p">)</span> <span class="o">==</span> <span class="n">WAIT_OBJECT_0</span><span class="p">);</span>
+</span><span class='line'>
+</span><span class='line'>  <span class="p">}</span>
+</span></code></pre></td></tr></table></div></figure></notextile></div>
+
+
+<p>В результате мы получили вызов функции в удаленном процессе. Однако для полноценного RPC не хватает передачи в функцию параметров и приема результата выполнения. Об этом подробно расскажу во второй части.</p>
+
+<p><a href="/mor_t/downloads/simpleRPC.zip">Исходный код</a></p>
+</div>
+
+
+
+
+
+
+  <footer>
+    <p class="meta">
+      
+  
+
+
+  
+    <span class="byline author vcard">by <span class="fn">Mor</span></span>
+  
+
+ - 
+      
+
+
+
+
+
+
+
+
+  
+
+
+<time datetime="2014-01-05T20:56:05+04:00" pubdate data-updated="true"></time> - 
+      
+
+posted in
+<span class="categories">
+  
+    <a class='category' href='/blog/categories/rpc/'>rpc</a>
+  
+</span>
+
+
+    </p>
+    
+      <div class="sharing">
+  
+  <a href="//twitter.com/share" class="twitter-share-button" data-url="http://morm.github.io/blog/2014/01/05/rpc-na-c-plus-plus-svoimi-rukami-chast'-1/" data-via="" data-counturl="http://morm.github.io/blog/2014/01/05/rpc-na-c-plus-plus-svoimi-rukami-chast'-1/" >Tweet</a>
+  
+  
+  
+</div>
+
+    
+    
+    
+      <a class="pull-right" href="/mor_t/blog/2014/02/20/rpc-na-c-plus-plus-svoimi-rukami-chast'-2/" title="Next Post: RPC на C++ своими руками. Часть 2">RPC на C++ своими руками. Часть 2 &raquo;</a>
+    
+  </footer>
+
+</div>
+
+          
+            <div class="article-format">
+              <h1>Comments</h1>
+              <div id="disqus_thread" aria-live="polite"><noscript>Please enable JavaScript to view the <a href="http://disqus.com/?ref_noscript">comments powered by Disqus.</a></noscript>
+</div>
+            </div>
+          
+        </article>
+      </div>
+    </div>
+  </div>
+  <div id="footer-widgets">
+  <div class="container">
+    <div class="row">
+  <div class="span3">
+    <h2>recent posts</h2>
+    <ul class="recent_posts">
+      
+        <li>
+          <a href="/mor_t/blog/2014/02/20/rpc-na-c-plus-plus-svoimi-rukami-chast'-2/">RPC на C++ своими руками. Часть 2</a>
+        </li>
+      
+        <li>
+          <a href="/mor_t/blog/2014/01/05/rpc-na-c-plus-plus-svoimi-rukami-chast'-1/">RPC на C++ своими руками. Часть 1</a>
+        </li>
+      
+    </ul>
+    <h2><a href="/mor_t/blog/archives">archives</a></h2>
+  </div>
+  <div class="span3">
+    
+
+  </div>
+  <div class="span4">
+    
+
+  </div>
+  <div class="span2">
+    <h2>found on</h2>
+
+<a href="https://github.com/morm/" rel="tooltip" title="Github"><img class="social_icon" title="Github" alt="github icon" src="/mor_t/images/glyphicons_381_github.png"></a>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+  </div>
+</div>
+
+  </div>
+</div>
+<footer class="footer">
+  <div class="container">
+    <p class="pull-left">
+  <a href="/mor_t/">Mor's dev blog</a>
+  - Copyright &copy; 2014 - Mor
+</p>
+<p class="pull-right">
+  <span>Powered by <a href="http://octopress.org/">Octopress</a>.</span>
+  
+    <span>Designed by <a href="http://www.AdrianArtiles.com">Adrian Artiles</a>.</span>
+  
+</p>
+
+  </div>
+</footer>
+
+  <script src="//ajax.googleapis.com/ajax/libs/jquery/1.7.2/jquery.min.js" type="text/javascript"></script>
+<script>window.jQuery || document.write('<script src="/mor_t/javascripts/libs/jquery-1.7.2.min.js" type="text/javascript"><\/script>')</script>
+<script src="/mor_t/javascripts/libs/bootstrap.min.js" type="text/javascript"></script>
+<script src="/mor_t/javascripts/jquery.tweet.js" type="text/javascript"></script>
+<script src="/mor_t/javascripts/jquery.instagram.js" type="text/javascript"></script>
+<script src="/mor_t/javascripts/libs/jquery.masonry.min.js" type="text/javascript"></script>
+<script src="/mor_t/javascripts/custom.js" type="text/javascript"></script>
+
+
+<script type="text/javascript">
+      var disqus_shortname = 'morsdevblog';
+      
+        
+        // var disqus_developer = 1;
+        var disqus_identifier = 'http://morm.github.io/blog/2014/01/05/rpc-na-c-plus-plus-svoimi-rukami-chast'-1/';
+        var disqus_url = 'http://morm.github.io/blog/2014/01/05/rpc-na-c-plus-plus-svoimi-rukami-chast'-1/';
+        var disqus_script = 'embed.js';
+      
+    (function () {
+      var dsq = document.createElement('script'); dsq.type = 'text/javascript'; dsq.async = true;
+      dsq.src = 'http://' + disqus_shortname + '.disqus.com/' + disqus_script;
+      (document.getElementsByTagName('head')[0] || document.getElementsByTagName('body')[0]).appendChild(dsq);
+    }());
+</script>
+
+
+
+
+
+
+
+  <script type="text/javascript">
+    (function(){
+      var twitterWidgets = document.createElement('script');
+      twitterWidgets.type = 'text/javascript';
+      twitterWidgets.async = true;
+      twitterWidgets.src = 'http://platform.twitter.com/widgets.js';
+      document.getElementsByTagName('head')[0].appendChild(twitterWidgets);
+    })();
+  </script>
+
+
+
+
+</body>
+</html>

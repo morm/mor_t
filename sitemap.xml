@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<urlset xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.sitemaps.org/schemas/sitemap/0.9 http://www.sitemaps.org/schemas/sitemap/0.9/sitemap.xsd" xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+  
+  
+  <url>
+    <loc>http://morm.github.io/blog/2014/02/20/rpc-na-c-plus-plus-svoimi-rukami-chast'-2/</loc>
+    <lastmod>2014-02-20T21:20:38+04:00</lastmod>
+    <priority>0.8</priority>
+  </url>
+  
+  <url>
+    <loc>http://morm.github.io/blog/2014/01/05/rpc-na-c-plus-plus-svoimi-rukami-chast'-1/</loc>
+    <lastmod>2014-01-05T20:56:05+04:00</lastmod>
+    <priority>0.8</priority>
+  </url>
+  
+  
+  <url>
+    <loc>http://morm.github.io/blog/archives/</loc>
+    <lastmod>2014-08-16T19:32:46+04:00</lastmod>
+    <changefreq>weekly</changefreq>
+    <priority>0.7</priority>
+  </url>
+  
+  <url>
+    <loc>http://morm.github.io/</loc>
+    <lastmod>2014-08-16T19:32:46+04:00</lastmod>
+    <changefreq>weekly</changefreq>
+    <priority>1.0</priority>
+  </url>
+  
+  
+</urlset>
